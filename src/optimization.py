@@ -151,16 +151,16 @@ class StrategyOptimizer:
             self.logger.error(f"Optimization error: {str(e)}")
             raise 
 
-    def optimize_strategy(self, n_trials: int = 5000) -> Dict:
+    def optimize_strategy(self, n_trials: int = 50) -> Dict:
         """Strateji parametrelerini optimize et"""
         try:
             # TPE sampler'ı daha fazla çeşitlilik için ayarla
             sampler = optuna.samplers.TPESampler(
-                n_startup_trials=200,    # 50'den 200'e çıkaralım (rastgele deneme sayısı)
-                n_ei_candidates=200,     # 100'den 200'e çıkaralım (öneri sayısı)
+                n_startup_trials=10,     # 50'den 10'a düşürdük
+                n_ei_candidates=20,      # 100'den 20'ye düşürdük
                 seed=42,
-                multivariate=True,       # Parametreler arası ilişkileri dikkate al
-                constant_liar=True       # Daha fazla çeşitlilik için
+                multivariate=True,
+                constant_liar=True
             )
             
             study = optuna.create_study(

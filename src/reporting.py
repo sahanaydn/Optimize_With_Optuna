@@ -13,6 +13,7 @@ import optuna.visualization.matplotlib
 import base64
 import io
 import numpy as np
+from jinja2 import Template
 
 class ReportGenerator:
     def __init__(self, 
@@ -38,14 +39,20 @@ class ReportGenerator:
     def generate_report(self) -> str:
         """PDF rapor oluştur"""
         try:
+            # Buy & Hold return hesapla
+            first_price = self.backtest_results['price_data']['close'].iloc[0]
+            last_price = self.backtest_results['price_data']['close'].iloc[-1]
+            buy_hold_return = ((last_price - first_price) / first_price)  # Ondalık olarak
+
             # Test edilen tarih aralığını hesapla
             trades_df = self.backtest_results['trade_history']
             test_start = pd.to_datetime(trades_df['entry_time'].min()).strftime("%Y-%m-%d %H:%M")
             test_end = pd.to_datetime(trades_df['exit_time'].max()).strftime("%Y-%m-%d %H:%M")
-            timeframe = self.backtest_results.get('timeframe', '1h')  # Varsayılan 1h
+            timeframe = self.backtest_results.get('timeframe', '1h')
             
             # Rapor bileşenlerini hazırla
             performance_summary = self._create_performance_summary()
+            performance_summary['Buy & Hold Return'] = buy_hold_return  # Buy & Hold'u ekle
             trade_analysis = self._create_trade_analysis()
             optimization_results = self._create_optimization_summary() if self.optimization_results else None
             comparison_chart = self._create_comparison_chart()
