@@ -1,99 +1,86 @@
 import sys
 from pathlib import Path
-sys.path.append(str(Path(__file__).parent.parent))
+from datetime import datetime, timedelta
 
+# Proje kök dizinini Python path'ine ekle
+project_root = str(Path(__file__).parent.parent)
+sys.path.append(project_root)
+
+from src.data_management import DataManager
 from src.optimization import StrategyOptimizer
 from src.reporting import ReportGenerator
 from strategies.custom_strategies.your_strategy import YourStrategy
-import ccxt
-import pandas as pd
-from datetime import datetime, timedelta
 
-# Binance'den veri çek
-exchange = ccxt.binance({
-    'timeout': 30000,  # 30 saniye
-    'enableRateLimit': True,  # Rate limiting aktif
-    'rateLimit': 1000  # Her istek arası 1 saniye bekle
-})
-
-# Hata yönetimi ekleyelim
-max_retries = 3
-retry_count = 0
-
-while retry_count < max_retries:
-    try:
-        end_time = exchange.milliseconds()
-        start_time = end_time - (90 * 24 * 60 * 60 * 1000)  # Son 90 gün
+def run_optimization(
+    symbol: str = "BTC/USDT",
+    timeframe: str = "1h",
+    start_date: datetime = None,
+    end_date: datetime = None,
+    n_trials: int = 200
+) -> str:
+    """
+    Strateji optimizasyonu ve backtest yap
+    
+    Args:
+        symbol: İşlem çifti (örn: "BTC/USDT")
+        timeframe: Zaman dilimi (örn: "1h", "4h", "1d")
+        start_date: Başlangıç tarihi
+        end_date: Bitiş tarihi
+        n_trials: Optimizasyon deneme sayısı
         
-        # Daha fazla veri alalım
-        ohlcv = []
-        current_start = start_time
+    Returns:
+        str: Oluşturulan rapor dosyasının yolu
+    """
+    # Varsayılan tarihler
+    if end_date is None:
+        end_date = datetime.now()
+    if start_date is None:
+        start_date = end_date - timedelta(days=90)  # Son 90 gün
         
-        while current_start < end_time:
-            print(f"Fetching data from {pd.to_datetime(current_start, unit='ms')}")
-            
-            batch = exchange.fetch_ohlcv(
-                symbol='BTC/USDT',
-                timeframe='1h',
-                since=current_start,
-                limit=1000
-            )
-            
-            if not batch:
-                break
-                
-            ohlcv.extend(batch)
-            current_start = batch[-1][0] + 1  # Son mumun zamanından devam et
-            
-            # Her batch sonrası biraz bekle
-            exchange.sleep(1000)  # 1 saniye bekle
-        
-        break  # Başarılı olduysa döngüden çık
-        
-    except Exception as e:
-        retry_count += 1
-        print(f"Error occurred: {str(e)}")
-        print(f"Retry {retry_count}/{max_retries}")
-        exchange.sleep(5000)  # 5 saniye bekle ve tekrar dene
-        
-        if retry_count == max_retries:
-            raise Exception("Maximum retries reached. Could not fetch data.")
+    print(f"Fetching data for {symbol}...")
+    print(f"Period: {start_date} to {end_date}")
+    print(f"Timeframe: {timeframe}")
+    
+    # Veri çek
+    dm = DataManager(exchange='binance')
+    data = dm.fetch_ohlcv(
+        symbol=symbol,
+        timeframe=timeframe,
+        start_date=start_date,
+        end_date=end_date
+    )
+    
+    # Optimize et
+    optimizer = StrategyOptimizer(
+        strategy_class=YourStrategy,
+        data=data,
+        timeframe=timeframe
+    )
+    
+    print(f"\nStarting optimization with {n_trials} trials...")
+    optimization_results = optimizer.optimize(n_trials=n_trials)
+    
+    # Rapor oluştur
+    report_generator = ReportGenerator(
+        strategy_name=f"MA Cross Strategy ({symbol})",
+        backtest_results=optimizer.backtest_results,
+        optimization_results=optimization_results
+    )
+    
+    report_path = report_generator.generate_report()
+    print(f"\nReport generated: {report_path}")
+    return report_path
 
-# DataFrame'e çevir
-data = pd.DataFrame(
-    ohlcv,
-    columns=['timestamp', 'open', 'high', 'low', 'close', 'volume']
-)
-data['timestamp'] = pd.to_datetime(data['timestamp'], unit='ms')
-data.set_index('timestamp', inplace=True)
+if __name__ == "__main__":
+    # 1 Kasım 2023'ten bugüne kadar
+    end_date = datetime.now()
+    start_date = datetime(2024,9,1)
 
-# Optimizasyonu çalıştır
-optimizer = StrategyOptimizer(
-    strategy_class=YourStrategy,
-    data=data,
-    timeframe="1h"
-)
-
-print("\nStarting optimization...")
-optimization_results = optimizer.optimize_strategy(n_trials=500)  # 500 deneme yapalım
-
-# En iyi 5 parametre kombinasyonunu göster
-print("\nTop 5 Parameter Combinations:")
-for i, trial in enumerate(optimization_results['top_trials'], 1):
-    print(f"\nRank {i}:")
-    print(f"Parameters: {trial['params']}")
-    print(f"Return: {trial['value']:.2%}")
-    print(f"Duration: {trial['duration'].total_seconds():.2f}s")
-
-print("\nOptimization completed!")
-
-# Raporu oluştur
-print("\nGenerating report...")
-report_generator = ReportGenerator(
-    strategy_name="Your Strategy",
-    backtest_results=optimizer.backtest_results,
-    optimization_results=optimization_results
-)
-
-report_path = report_generator.generate_report()
-print(f"\nReport generated successfully: {report_path}") 
+    
+    report_path = run_optimization(
+        symbol="BTC/USDT",
+        timeframe="1h",
+        start_date=start_date,
+        end_date=end_date,
+        n_trials=200  # Deneme sayısını 200'e çıkaralım
+    ) 

@@ -404,6 +404,10 @@ class ReportGenerator:
                             <th>Rank</th>
                             <th>Parameters</th>
                             <th>Return</th>
+                            <th>Total Trades</th>
+                            <th>Winning Trades</th>
+                            <th>Losing Trades</th>
+                            <th>Win Rate</th>
                         </tr>
                         {% for trial in optimization_results.top_trials %}
                         <tr>
@@ -414,6 +418,10 @@ class ReportGenerator:
                                 {% endfor %}
                             </td>
                             <td>{{ "%.2f%%"|format(trial.value * 100) }}</td>
+                            <td>{{ trial.trade_stats.total_trades }}</td>
+                            <td>{{ trial.trade_stats.winning_trades }}</td>
+                            <td>{{ trial.trade_stats.losing_trades }}</td>
+                            <td>{{ trial.trade_stats.win_rate }}</td>
                         </tr>
                         {% endfor %}
                     </table>

@@ -27,14 +27,14 @@ class StrategyOptimizer:
         self.search_space = {
             'fast_ma': {
                 'min': 3,
-                'max': 100,    # 50'den 100'e çıkardık
-                'step': 1,
+                'max': 100,
+                'step': 1,     # 1'e düşürdük
                 'type': 'int'
             },
             'slow_ma': {
                 'min': 10,
-                'max': 300,    # 200'den 300'e çıkardık
-                'step': 2,
+                'max': 300,
+                'step': 1,     # 2'den 1'e düşürdük
                 'type': 'int'
             }
         }
@@ -86,70 +86,57 @@ class StrategyOptimizer:
         
         return performance.get('total_return', float('-inf'))
     
-    def optimize(self) -> Dict[str, Any]:
+    def optimize(self, n_trials: int = 200) -> Dict:
         """Bayesian optimizasyonu başlat"""
         try:
             study = optuna.create_study(
                 direction='maximize',
                 sampler=optuna.samplers.TPESampler(
-                    n_startup_trials=10,
+                    n_startup_trials=20,
                     seed=42
                 )
             )
             
-            n_trials = 50
             self.logger.info(f"Starting Bayesian optimization with {n_trials} trials...")
             
             # İlerleme takibi için callback
             def callback(study, trial):
-                if trial.number % 5 == 0:
+                if trial.number % 10 == 0:
                     self.logger.info(f"Trial {trial.number}/{n_trials}")
                     self.logger.info(f"Best value so far: {study.best_value:.2%}")
                     self.logger.info("-" * 50)
             
             study.optimize(self.objective, n_trials=n_trials, callbacks=[callback])
             
-            # Parametreleri tam sayıya yuvarla
+            # En iyi parametrelerle son bir backtest yap
             best_params = {
-                'fast_ma': int(round(study.best_params['fast_ma'])),
-                'slow_ma': int(round(study.best_params['slow_ma']))
+                'name': 'optimized_strategy',
+                'timeframe': self.timeframe,
+                'parameters': study.best_params
             }
-            best_value = study.best_value
             
-            self.logger.info(f"Bayesian optimization completed.")
-            self.logger.info(f"Best parameters: {best_params}")
-            self.logger.info(f"Best total return: {best_value:.2%}")
+            strategy = self.strategy_class(parameters=StrategyParameters(**best_params))
+            trades = strategy.execute_trades(self.data)
+            performance = strategy.calculate_performance()
             
-            # En iyi parametrelerin etrafındaki bölgeyi incele
-            self.logger.info("\nTop 5 parameter combinations:")
-            trials_df = study.trials_dataframe()
-            top_trials = trials_df.nlargest(5, 'value')
-            for _, trial in top_trials.iterrows():
-                self.logger.info(
-                    f"Fast MA: {int(round(trial['params_fast_ma']))}, "
-                    f"Slow MA: {int(round(trial['params_slow_ma']))}, "
-                    f"Return: {trial['value']:.2%}"
-                )
-            
-            # Top trials'ı da tam sayıya yuvarla
-            top_trials_rounded = []
-            for trial in top_trials.to_dict('records'):
-                top_trials_rounded.append({
-                    'params_fast_ma': int(round(trial['params_fast_ma'])),
-                    'params_slow_ma': int(round(trial['params_slow_ma'])),
-                    'value': trial['value']
-                })
+            # Backtest sonuçlarını sakla
+            self.backtest_results = {
+                'trade_history': pd.DataFrame(trades),
+                'performance_metrics': performance,
+                'equity_curve': self._calculate_equity_curve(trades),
+                'price_data': self.data
+            }
             
             return {
-                'best_params': best_params,
-                'best_value': best_value,
-                'study': study,
-                'top_trials': top_trials_rounded
+                'best_params': study.best_params,
+                'best_value': study.best_value,
+                'top_trials': self._get_diverse_trials(study),
+                'optimization_history': study.trials_dataframe().to_dict()
             }
             
         except Exception as e:
             self.logger.error(f"Optimization error: {str(e)}")
-            raise 
+            raise
 
     def optimize_strategy(self, n_trials: int = 50) -> Dict:
         """Strateji parametrelerini optimize et"""
@@ -246,3 +233,52 @@ class StrategyOptimizer:
         equity.index = trades_df['exit_time']
         
         return equity 
+
+    def _get_diverse_trials(self, study: optuna.Study) -> List[Dict]:
+        """En iyi ve çeşitli denemeleri getir"""
+        trials_df = study.trials_dataframe()
+        if trials_df.empty:
+            return []
+        
+        # En iyi denemeleri al
+        top_trials = []
+        used_params = set()  # Kullanılan parametre kombinasyonlarını takip et
+        
+        for _, trial in trials_df.sort_values('value', ascending=False).iterrows():
+            fast_ma = int(round(trial['params_fast_ma']))
+            slow_ma = int(round(trial['params_slow_ma']))
+            
+            # Bu parametre kombinasyonu daha önce kullanıldı mı?
+            param_key = (fast_ma, slow_ma)
+            if param_key not in used_params and len(top_trials) < 5:
+                # Stratejiyi bu parametrelerle test et
+                strategy_params = StrategyParameters(
+                    name="test_strategy",
+                    timeframe=self.timeframe,
+                    parameters={'fast_ma': fast_ma, 'slow_ma': slow_ma}
+                )
+                strategy = self.strategy_class(parameters=strategy_params)
+                trades = strategy.execute_trades(self.data)
+                
+                # İşlem istatistiklerini hesapla
+                total_trades = len(trades)
+                winning_trades = len([t for t in trades if t['pnl'] > 0])
+                losing_trades = total_trades - winning_trades
+                win_rate = (winning_trades/total_trades*100) if total_trades > 0 else 0
+                
+                top_trials.append({
+                    'params': {
+                        'fast_ma': fast_ma,
+                        'slow_ma': slow_ma
+                    },
+                    'value': float(trial['value']),
+                    'trade_stats': {
+                        'total_trades': total_trades,
+                        'winning_trades': winning_trades,
+                        'losing_trades': losing_trades,
+                        'win_rate': f"{win_rate:.1f}%"
+                    }
+                })
+                used_params.add(param_key)
+        
+        return top_trials 
