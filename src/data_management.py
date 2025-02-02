@@ -12,14 +12,19 @@ class DataManager:
         Args:
             exchange: Borsa adı (default: 'binance')
         """
-        self.exchange = getattr(ccxt, exchange)()
+        self.exchange = getattr(ccxt, exchange)({
+            'enableRateLimit': True,
+            'options': {
+                'defaultType': 'spot'
+            }
+        })
         self.logger = logging.getLogger(__name__)
         
     def fetch_ohlcv(self,
                    symbol: str,
                    timeframe: str = '1h',
-                   start_date: Optional[datetime] = None,
-                   end_date: Optional[datetime] = None) -> pd.DataFrame:
+                   start_date: datetime = None,
+                   end_date: datetime = None) -> pd.DataFrame:
         """
         OHLCV verilerini çek
         
@@ -33,7 +38,7 @@ class DataManager:
             pd.DataFrame: OHLCV verileri
         """
         try:
-            # Tarihleri milisaniyeye çevir
+            # Tarihleri Unix timestamp'e çevir
             since = int(start_date.timestamp() * 1000) if start_date else None
             until = int(end_date.timestamp() * 1000) if end_date else None
             
@@ -57,7 +62,7 @@ class DataManager:
                 # Son çekilen verinin timestamp'i
                 last_timestamp = ohlcv[-1][0]
                 
-                # Eğer bitiş tarihine ulaştıysak veya yeterli veri çektiyse dur
+                # Eğer bitiş tarihine ulaştıysak dur
                 if until and last_timestamp >= until:
                     break
                     
@@ -66,6 +71,10 @@ class DataManager:
                 
                 # Rate limit'e takılmamak için bekle
                 self.exchange.sleep(self.exchange.rateLimit / 1000)
+            
+            if not all_ohlcv:
+                print(f"Uyarı: {symbol} için {start_date} - {end_date} aralığında veri bulunamadı!")
+                return pd.DataFrame(columns=['timestamp', 'open', 'high', 'low', 'close', 'volume'])
             
             # DataFrame'e çevir
             df = pd.DataFrame(
@@ -77,15 +86,15 @@ class DataManager:
             df['timestamp'] = pd.to_datetime(df['timestamp'], unit='ms')
             df.set_index('timestamp', inplace=True)
             
-            # Tarih filtreleme
+            # Tarih aralığını filtrele
             if start_date:
-                df = df[df.index >= pd.to_datetime(start_date)]
+                df = df[df.index >= pd.Timestamp(start_date)]
             if end_date:
-                df = df[df.index <= pd.to_datetime(end_date)]
+                df = df[df.index <= pd.Timestamp(end_date)]
             
             print(f"Fetched {len(df)} candles from {df.index[0]} to {df.index[-1]}")
             return df
             
         except Exception as e:
-            self.logger.error(f"Data fetch error: {str(e)}")
-            raise 
+            print(f"Hata: Veri çekilemedi - {str(e)}")
+            return pd.DataFrame(columns=['open', 'high', 'low', 'close', 'volume']) 

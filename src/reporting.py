@@ -37,61 +37,67 @@ class ReportGenerator:
         self.report_path = self.report_dir / f"report_{timestamp}.pdf"
         
     def generate_report(self) -> str:
-        """PDF rapor oluştur"""
-        try:
-            # Buy & Hold return hesapla
-            first_price = self.backtest_results['price_data']['close'].iloc[0]
-            last_price = self.backtest_results['price_data']['close'].iloc[-1]
-            buy_hold_return = ((last_price - first_price) / first_price)  # Ondalık olarak
-
-            # Test edilen tarih aralığını hesapla
-            trades_df = self.backtest_results['trade_history']
-            test_start = pd.to_datetime(trades_df['entry_time'].min()).strftime("%Y-%m-%d %H:%M")
-            test_end = pd.to_datetime(trades_df['exit_time'].max()).strftime("%Y-%m-%d %H:%M")
-            timeframe = self.backtest_results.get('timeframe', '1h')
+        """Rapor oluştur"""
+        performance = self._create_performance_summary()
+        
+        # Buy & Hold return'ü hesapla
+        price_data = self.backtest_results['price_data']
+        buy_hold_return = (price_data['close'].iloc[-1] - price_data['close'].iloc[0]) / price_data['close'].iloc[0]
+        performance['Buy & Hold Return'] = buy_hold_return
+        
+        # Markdown formatında rapor oluştur
+        report = "## Performans Özeti\n\n"
+        report += "| Metrik | Değer |\n"
+        report += "|--------|-------|\n"
+        
+        for metric, value in performance.items():
+            if isinstance(value, float):
+                report += f"| {metric} | {value:.2%} |\n"
+            else:
+                report += f"| {metric} | {value} |\n"
             
-            # Rapor bileşenlerini hazırla
-            performance_summary = self._create_performance_summary()
-            performance_summary['Buy & Hold Return'] = buy_hold_return  # Buy & Hold'u ekle
-            trade_analysis = self._create_trade_analysis()
-            optimization_results = self._create_optimization_summary() if self.optimization_results else None
-            comparison_chart = self._create_comparison_chart()
-            
-            # HTML şablonunu yükle ve içeriği oluştur
-            template = self._load_template()
-            html_content = template.render(
-                strategy_name=self.strategy_name,
-                generation_date=datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-                test_period={
-                    'start': test_start,
-                    'end': test_end,
-                    'timeframe': timeframe
-                },
-                performance_summary=performance_summary,
-                trade_analysis=trade_analysis,
-                optimization_results=optimization_results,
-                comparison_chart=comparison_chart
-            )
-            
-            # PDF oluştur
-            options = {
-                'quiet': '',
-                'enable-local-file-access': None
-            }
-            
-            pdfkit.from_string(
-                html_content, 
-                str(self.report_path),
-                options=options,
-                css=str(Path(__file__).parent / 'report_style.css')
-            )
-            
-            self.logger.info(f"Report generated: {self.report_path}")
-            return str(self.report_path)
-            
-        except Exception as e:
-            self.logger.error(f"Report generation error: {str(e)}")
-            raise
+        # Test edilen tarih aralığını hesapla
+        trades_df = self.backtest_results['trade_history']
+        test_start = pd.to_datetime(trades_df['entry_time'].min()).strftime("%Y-%m-%d %H:%M")
+        test_end = pd.to_datetime(trades_df['exit_time'].max()).strftime("%Y-%m-%d %H:%M")
+        timeframe = self.backtest_results.get('timeframe', '1h')
+        
+        # Rapor bileşenlerini hazırla
+        trade_analysis = self._create_trade_analysis()
+        optimization_results = self._create_optimization_summary() if self.optimization_results else None
+        comparison_chart = self._create_comparison_chart()
+        
+        # HTML şablonunu yükle ve içeriği oluştur
+        template = self._load_template()
+        html_content = template.render(
+            strategy_name=self.strategy_name,
+            generation_date=datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+            test_period={
+                'start': test_start,
+                'end': test_end,
+                'timeframe': timeframe
+            },
+            performance_summary=performance,
+            trade_analysis=trade_analysis,
+            optimization_results=optimization_results,
+            comparison_chart=comparison_chart
+        )
+        
+        # PDF oluştur
+        options = {
+            'quiet': '',
+            'enable-local-file-access': None
+        }
+        
+        pdfkit.from_string(
+            html_content, 
+            str(self.report_path),
+            options=options,
+            css=str(Path(__file__).parent / 'report_style.css')
+        )
+        
+        self.logger.info(f"Report generated: {self.report_path}")
+        return str(self.report_path)
             
     def _create_trade_analysis(self) -> Dict:
         """İşlem analizlerini yap"""
@@ -146,13 +152,12 @@ class ReportGenerator:
         
         return {
             'Total Return': metrics['total_return'],
-            'Number of Trades': metrics['total_trades'],
+            'Compound Return': metrics['compound_return'],
+            'Total Trades': metrics['total_trades'],
             'Win Rate': metrics['win_rate'],
             'Profit Factor': metrics['profit_factor'],
-            'Sharpe Ratio': metrics['sharpe_ratio'],
             'Max Drawdown': metrics['max_drawdown'],
-            'Sortino Ratio': metrics['sortino_ratio'],
-            'Calmar Ratio': metrics['calmar_ratio']
+            'Sharpe Ratio': metrics['sharpe_ratio']
         }
         
     def _calculate_trade_duration_stats(self, trades_df: pd.DataFrame) -> Dict:
