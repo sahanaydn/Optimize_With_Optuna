@@ -19,13 +19,15 @@ class ReportGenerator:
     def __init__(self, 
                  strategy_name: str,
                  backtest_results: Dict[str, Any],
-                 optimization_results: Dict[str, Any] = None):
+                 optimization_results: Dict[str, Any] = None,
+                 parameter_space: Dict = None):
         """
         Rapor oluşturucu sınıf
         """
         self.strategy_name = strategy_name
         self.backtest_results = backtest_results
         self.optimization_results = optimization_results
+        self.parameter_space = parameter_space
         self.logger = logging.getLogger(__name__)
         
         # Sadece PDF raporu için klasör oluştur
@@ -40,14 +42,14 @@ class ReportGenerator:
         """Rapor oluştur"""
         performance = self._create_performance_summary()
         
-        # Buy & Hold return'ü hesapla
+        # Buy & Hold hesaplama - dinamik
         price_data = self.backtest_results['price_data']
         buy_hold_return = (price_data['close'].iloc[-1] - price_data['close'].iloc[0]) / price_data['close'].iloc[0]
         performance['Buy & Hold Return'] = buy_hold_return
         
-        # Markdown formatında rapor oluştur
-        report = "## Performans Özeti\n\n"
-        report += "| Metrik | Değer |\n"
+        # Markdown formatında rapor - dinamik
+        report = "## Performans Özeti\n\n"  # Bu başlıklar statik
+        report += "| Metrik | Değer |\n"    # Bu tablo yapısı statik
         report += "|--------|-------|\n"
         
         for metric, value in performance.items():
@@ -56,11 +58,11 @@ class ReportGenerator:
             else:
                 report += f"| {metric} | {value} |\n"
             
-        # Test edilen tarih aralığını hesapla
+        # Test edilen tarih aralığını ve timeframe'i al
         trades_df = self.backtest_results['trade_history']
         test_start = pd.to_datetime(trades_df['entry_time'].min()).strftime("%Y-%m-%d %H:%M")
         test_end = pd.to_datetime(trades_df['exit_time'].max()).strftime("%Y-%m-%d %H:%M")
-        timeframe = self.backtest_results.get('timeframe', '1h')
+        timeframe = self.backtest_results.get('timeframe', '1h')  # Gerçek timeframe'i al
         
         # Rapor bileşenlerini hazırla
         trade_analysis = self._create_trade_analysis()
@@ -75,7 +77,7 @@ class ReportGenerator:
             test_period={
                 'start': test_start,
                 'end': test_end,
-                'timeframe': timeframe
+                'timeframe': timeframe  # Dinamik timeframe
             },
             performance_summary=performance,
             trade_analysis=trade_analysis,
@@ -194,16 +196,24 @@ class ReportGenerator:
         
     def _create_optimization_summary(self) -> Dict:
         """Optimizasyon özeti oluştur"""
-        if not self.optimization_results:
+        if not self.optimization_results or not self.parameter_space:
             return None
             
-        # En iyi 5 kombinasyonu da ekle
-        top_trials = self.optimization_results.get('top_trials', [])
+        # Search space bilgisini dinamik oluştur
+        search_space = {}
+        for param_name, param_config in self.parameter_space.items():
+            search_space[param_name] = {
+                'min': param_config['min'],
+                'max': param_config['max'],
+                'step': param_config.get('step', 1),
+                'type': param_config['type']
+            }
         
         return {
+            'search_space': search_space,  # Dinamik search space
             'best_params': self.optimization_results['best_params'],
             'best_value': self.optimization_results['best_value'],
-            'top_trials': top_trials
+            'top_trials': self.optimization_results.get('top_trials', [])
         }
         
     def _create_comparison_chart(self) -> str:

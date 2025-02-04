@@ -112,3 +112,8 @@ img {
 .optimization-table tr:nth-child(1) {
     background-color: rgba(46, 204, 113, 0.1);
 }
+
+.report-header {
+    background-color: #f5f5f5;
+    padding: 20px;
+}

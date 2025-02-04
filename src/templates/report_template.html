@@ -1,0 +1,38 @@
+<div class="report-header">
+    <h1>{{ strategy_name }}</h1>
+    <p>Generated on: {{ generation_date }}</p>
+</div>
+
+<div class="performance-summary">
+    <h2>Performance Summary</h2>  <!-- Statik başlık -->
+    <!-- ... -->
+</div>
+
+<!-- Search Space bölümü -->
+<div class="optimization-section">
+    <h2>Search Space</h2>
+    <table>
+        <tr>
+            <th>Parameter</th>
+            <th>Min</th>
+            <th>Max</th>
+            <th>Step</th>
+            <th>Type</th>
+        </tr>
+        {% for param_name, config in optimization_results.search_space.items() %}
+        <tr>
+            <td>{{ param_name }}</td>
+            <td>{{ config.min }}</td>
+            <td>{{ config.max }}</td>
+            <td>{{ config.step }}</td>
+            <td>{{ config.type }}</td>
+        </tr>
+        {% endfor %}
+    </table>
+</div>
+
+<!-- Timeframe bilgisi -->
+<div class="test-period">
+    <p>Test Period: {{ test_period.start }} to {{ test_period.end }}</p>
+    <p>Timeframe: {{ test_period.timeframe }}</p>
+</div> 

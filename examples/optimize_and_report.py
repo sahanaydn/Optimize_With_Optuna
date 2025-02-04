@@ -22,7 +22,8 @@ def run_optimization(
     start_date: datetime = None,
     end_date: datetime = None,
     n_trials: int = 100,
-    exchange: str = "binance"
+    exchange: str = "binance",
+    optimizer_type: str = "bayesian"
 ) -> str:
     """
     Strateji optimizasyonu ve backtest yap
@@ -35,6 +36,7 @@ def run_optimization(
         end_date: Bitiş tarihi
         n_trials: Optimizasyon deneme sayısı
         exchange: Borsa adı (örn: "binance", "kucoin")
+        optimizer_type: Optimizasyon algoritması tipi (örn: "bayesian", "grid")
     """
     # Varsayılan tarihler
     if end_date is None:
@@ -67,7 +69,8 @@ def run_optimization(
     optimizer = StrategyOptimizer(
         strategy_class=strategy_class,
         data=data,
-        timeframe=timeframe
+        timeframe=timeframe,
+        optimizer_type=optimizer_type
     )
     
     print(f"\nStarting optimization with {n_trials} trials...")
@@ -77,7 +80,8 @@ def run_optimization(
     report_generator = ReportGenerator(
         strategy_name=f"{strategy_name} ({symbol})",
         backtest_results=optimizer.backtest_results,
-        optimization_results=optimization_results
+        optimization_results=optimization_results,
+        parameter_space=optimizer.parameter_space
     )
     
     report_path = report_generator.generate_report()
@@ -117,9 +121,17 @@ if __name__ == "__main__":
     # Bitiş tarihi
     end_date_str = input("Bitiş tarihi (YYYY-MM-DD) [varsayılan: şimdi]: ")
 
-    # Optimizasyon deneme sayısı
-    n_trials_str = input("Optimizasyon deneme sayısı [varsayılan: 100]: ")
-    n_trials = int(n_trials_str) if n_trials_str.isdigit() else 100
+    # Optimizasyon tipini seç
+    optimizer_type = input("\nOptimizasyon tipi (bayesian/grid) [varsayılan: bayesian]: ").lower() or "bayesian"
+    if optimizer_type not in ["bayesian", "grid"]:
+        print("Geçersiz optimizasyon tipi! Bayesian kullanılacak.")
+        optimizer_type = "bayesian"
+
+    # Sadece bayesian için n_trials sor
+    n_trials = None
+    if optimizer_type == "bayesian":
+        n_trials_str = input("Optimizasyon deneme sayısı [varsayılan: 100]: ")
+        n_trials = int(n_trials_str) if n_trials_str.isdigit() else 100
 
     # Tarihleri ayarla
     end_date = datetime.now()
@@ -155,6 +167,7 @@ if __name__ == "__main__":
             start_date=start_date,
             end_date=end_date,
             n_trials=n_trials,
-            exchange=exchange
+            exchange=exchange,
+            optimizer_type=optimizer_type
         )
         print(f"Report generated: {report_path}\n") 

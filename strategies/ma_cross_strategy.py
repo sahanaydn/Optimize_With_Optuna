@@ -21,7 +21,7 @@ class MACrossStrategy(BaseStrategy):
     def parameter_space(self):
         return {
             'fast_ma': {
-                'min': 3,
+                'min': 30,
                 'max': 50,
                 'step': 1,
                 'type': 'int'
